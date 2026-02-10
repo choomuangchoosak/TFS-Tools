@@ -1,0 +1,847 @@
+<!doctype html>
+<html lang="th" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TFS TOOLS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: { schindler: { red: '#E2001A', dark: '#222' } },
+                    fontFamily: { sans: ['Sarabun', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #F8F9FA; -webkit-tap-highlight-color: transparent; font-size: 16px; }
+        .btn-circle { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .spinner { border: 4px solid #f3f3f3; border-radius: 50%; border-top: 4px solid #E2001A; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .tab-btn.active { border-bottom: 3px solid #E2001A; color: #E2001A; font-weight: bold; background-color: #FEF2F2; }
+        .tab-btn { color: #6B7280; transition: all 0.2s; font-size: 1.1rem; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .animate-pop { animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes popIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+        .card-border { border: 1px solid #D1D5DB; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    </style>
+</head>
+<body class="h-full flex flex-col text-gray-800 font-sans">
+
+    <header class="bg-schindler-red text-white shadow-lg sticky top-0 z-40 border-b-4 border-white/20">
+        <div class="max-w-lg mx-auto px-4 h-24 flex items-center justify-between">
+            <div class="flex-1 min-w-0 pr-3">
+                <h1 class="text-3xl font-bold truncate tracking-wide">TFS TOOLS</h1>
+                <p class="text-xs text-white/90 uppercase tracking-wide truncate mt-1">ระบบยืม-คืน อุปกรณ์ส่วนกลาง แผนก TFS</p>
+            </div>
+            <div class="flex gap-3 flex-shrink-0">
+                <button onclick="openHelp('user')" class="btn-circle bg-white text-schindler-red hover:bg-gray-100 transition active:scale-95 shadow-md">
+                    <span class="material-icons text-2xl">menu_book</span>
+                </button>
+                <button onclick="toggleAdmin()" class="btn-circle bg-black/20 text-white hover:bg-black/30 transition active:scale-95 shadow-md" id="adminBtn">
+                    <span class="material-icons text-2xl" id="adminIcon">admin_panel_settings</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 overflow-y-auto p-4 pb-28 hide-scrollbar">
+        <div class="max-w-lg mx-auto space-y-6">
+            
+            <div id="adminPanel" class="hidden space-y-4 animate-pop">
+                <div class="bg-white rounded-2xl card-border flex text-lg overflow-hidden">
+                    <button onclick="switchTab('requests')" id="tab-requests" class="tab-btn active flex-1 py-4 text-center">คำขออนุมัติ</button>
+                    <button onclick="switchTab('history')" id="tab-history" class="tab-btn flex-1 py-4 text-center">ประวัติยืม-คืน</button>
+                </div>
+
+                <div id="view-requests">
+                    <div id="reqList" class="space-y-3"></div>
+                    <div id="noReq" class="py-10 text-center text-gray-400 text-base hidden">
+                        <span class="material-icons text-5xl mb-2 opacity-20">inbox</span><br>ไม่มีรายการคำขอใหม่
+                    </div>
+                </div>
+
+                <div id="view-history" class="hidden">
+                    <div id="histList" class="space-y-3"></div>
+                    <div id="noHist" class="py-10 text-center text-gray-400 text-base hidden">
+                        <span class="material-icons text-5xl mb-2 opacity-20">history</span><br>ยังไม่มีประวัติการใช้งาน
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white p-3 rounded-2xl card-border sticky top-2 z-30 shadow-sm">
+                <div class="relative mb-3">
+                    <span class="material-icons absolute left-4 top-3.5 text-gray-400 text-2xl">search</span>
+                    <input type="text" id="searchBox" placeholder="ค้นหาชื่อ หรือ รหัส..." class="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-300 rounded-xl outline-none text-lg focus:bg-white focus:ring-2 focus:ring-schindler-red/30 transition" oninput="render()">
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="setFilter('all')" id="btnAll" class="flex-1 py-2.5 rounded-xl text-base font-bold bg-gray-800 text-white transition shadow border border-gray-800">ทั้งหมด</button>
+                    <button onclick="setFilter('available')" id="btnAvail" class="flex-1 py-2.5 rounded-xl text-base font-bold bg-white text-gray-600 hover:bg-green-50 transition border border-gray-300">ว่าง</button>
+                    <button onclick="setFilter('borrowed')" id="btnBorrow" class="flex-1 py-2.5 rounded-xl text-base font-bold bg-white text-gray-600 hover:bg-yellow-50 transition border border-gray-300">ถูกยืม</button>
+                </div>
+            </div>
+
+            <div id="grid" class="space-y-4"></div>
+            
+            <div id="loading" class="text-center py-12 hidden">
+                <div class="spinner mx-auto mb-4"></div>
+                <span class="text-gray-500 text-lg animate-pulse font-medium">กำลังโหลดข้อมูล...</span>
+            </div>
+
+            <div id="bottomStats" class="grid gap-4 mt-8 pt-4 border-t-2 border-dashed border-gray-200">
+                <div class="bg-white p-5 rounded-2xl card-border border-l-[10px] border-l-green-500 flex justify-between items-center bg-green-50/20">
+                    <div>
+                        <span class="text-sm text-gray-600 font-bold uppercase">สถานะว่าง (พร้อมใช้งาน)</span>
+                        <div class="text-5xl font-bold text-green-600 mt-2" id="cAvail">0</div>
+                    </div>
+                    <span class="material-icons text-green-200 text-6xl">check_circle</span>
+                </div>
+                <div class="bg-white p-5 rounded-2xl card-border border-l-[10px] border-l-yellow-500 flex justify-between items-center">
+                    <div>
+                        <span class="text-sm text-gray-600 font-bold uppercase">สถานะถูกยืม</span>
+                        <div class="text-4xl font-bold text-yellow-600 mt-2" id="cBorrow">0</div>
+                    </div>
+                    <span class="material-icons text-yellow-200 text-5xl">pending</span>
+                </div>
+                <div class="bg-white p-5 rounded-2xl card-border border-l-[10px] border-l-gray-800 flex justify-between items-center bg-gray-50">
+                    <div>
+                        <span class="text-sm text-gray-600 font-bold uppercase">จำนวนอุปกรณ์ทั้งหมด</span>
+                        <div class="text-4xl font-bold text-gray-800 mt-2" id="cTotal">0</div>
+                    </div>
+                    <span class="material-icons text-gray-300 text-5xl">inventory_2</span>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <button id="addBtn" onclick="openUpsert()" class="hidden fixed bottom-8 right-6 w-16 h-16 bg-schindler-red text-white rounded-full shadow-2xl flex items-center justify-center z-40 transition transform hover:scale-110 active:scale-95 border-2 border-white">
+        <span class="material-icons text-4xl">add</span>
+    </button>
+
+    <div id="imgModal" class="hidden fixed inset-0 z-[70] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-pop" onclick="closeImg()">
+        <img id="fullImage" class="max-w-full max-h-full rounded-lg shadow-2xl border-2 border-white/20" src="" onclick="event.stopPropagation()">
+        <button onclick="closeImg()" class="absolute top-6 right-6 text-white bg-gray-800/50 rounded-full p-2 hover:bg-gray-700 transition">
+            <span class="material-icons text-3xl">close</span>
+        </button>
+    </div>
+
+    <div id="helpModal" class="hidden fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-pop">
+        <div class="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl card-border">
+            <div class="bg-gray-800 p-5 flex justify-between items-center text-white">
+                <h3 class="text-xl font-bold flex items-center gap-3">
+                    <span class="material-icons">menu_book</span> คู่มือการใช้งาน
+                </h3>
+                <button onclick="closeAlert('helpModal')" class="hover:bg-gray-700 rounded-full p-1 transition"><span class="material-icons">close</span></button>
+            </div>
+            <div class="p-6 max-h-[70vh] overflow-y-auto text-base space-y-5" id="helpContent"></div>
+        </div>
+    </div>
+
+    <div id="customAlert" class="hidden fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-6 animate-pop">
+        <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl text-center card-border">
+            <div id="alertIconBox" class="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 bg-gray-100">
+                <span class="material-icons text-4xl" id="alertIcon">info</span>
+            </div>
+            <h3 class="text-xl font-bold text-gray-800 mb-2" id="alertTitle">แจ้งเตือน</h3>
+            <p class="text-lg text-gray-600 mb-6 leading-relaxed" id="alertMsg">รายละเอียด...</p>
+            <div class="flex gap-3 justify-center" id="alertBtns">
+                <button onclick="closeAlert('customAlert')" class="flex-1 py-3 bg-gray-800 text-white rounded-xl font-bold text-lg shadow-lg active:scale-95 transition">ตกลง</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="actModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end md:items-center justify-center">
+        <div class="bg-white w-full md:max-w-md rounded-t-3xl md:rounded-3xl p-6 shadow-2xl animate-slide-up max-h-[90vh] overflow-y-auto">
+            <h3 class="text-2xl font-bold text-gray-800 mb-1" id="actTitle">ทำรายการ</h3>
+            <p class="text-base text-gray-500 mb-6 bg-gray-50 p-3 rounded-lg border border-gray-200" id="actSub">...</p>
+            
+            <form onsubmit="event.preventDefault(); submitAct();">
+                <div class="space-y-5 mb-8">
+                    <div>
+                        <label class="text-base font-bold text-gray-600 mb-1 block">รหัสพนักงาน (6-12 หลัก) <span class="text-red-500">*</span></label>
+                        <input type="tel" id="actEmpId" class="w-full p-4 border border-gray-300 rounded-xl bg-gray-50 text-xl font-medium focus:border-schindler-red focus:ring-2 focus:ring-red-100 outline-none transition" placeholder="เช่น 123456" maxlength="12" pattern="\d*" required>
+                    </div>
+                    <div>
+                        <label class="text-base font-bold text-gray-600 mb-1 block">ชื่อ-นามสกุล <span class="text-red-500">*</span></label>
+                        <input type="text" id="actName" class="w-full p-4 border border-gray-300 rounded-xl text-lg focus:border-schindler-red focus:ring-2 focus:ring-red-100 outline-none transition" placeholder="ระบุชื่อของคุณ" required>
+                    </div>
+                    <div>
+                        <label class="text-base font-bold text-gray-600 mb-1 block">เบอร์โทรศัพท์ติดต่อ <span class="text-red-500">*</span></label>
+                        <input type="tel" id="actPhone" class="w-full p-4 border border-gray-300 rounded-xl text-lg focus:border-schindler-red focus:ring-2 focus:ring-red-100 outline-none transition" placeholder="08xxxxxxxx" required>
+                    </div>
+                    <div>
+                        <label class="text-base font-bold text-gray-600 mb-1 block">หมายเหตุ (ถ้ามี)</label>
+                        <textarea id="actNote" class="w-full p-4 border border-gray-300 rounded-xl text-lg focus:border-schindler-red focus:ring-2 focus:ring-red-100 outline-none transition" rows="2" placeholder="เช่น ใช้งานที่ Site A..."></textarea>
+                    </div>
+                </div>
+                <div class="flex gap-4">
+                    <button type="button" onclick="closeM('actModal')" class="flex-1 py-4 bg-gray-100 rounded-xl font-bold text-gray-600 text-lg hover:bg-gray-200 transition">ยกเลิก</button>
+                    <button type="submit" class="flex-1 py-4 bg-schindler-red text-white rounded-xl font-bold text-lg shadow-xl shadow-red-200 hover:bg-red-700 transition">ยืนยัน</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="upModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end md:items-center justify-center">
+        <div class="bg-white w-full md:max-w-md rounded-t-3xl md:rounded-3xl p-6 shadow-2xl animate-slide-up max-h-[90vh] overflow-y-auto">
+            <h3 class="text-2xl font-bold mb-6 text-gray-800" id="upTitle">จัดการอุปกรณ์</h3>
+            <form onsubmit="event.preventDefault(); submitUp();">
+                <input type="hidden" id="upMode">
+                <div class="space-y-5 mb-8">
+                    <div>
+                        <label class="text-base font-bold text-gray-600 mb-1 block">รหัสอุปกรณ์ (ID)</label>
+                        <input type="text" id="upId" class="w-full p-4 bg-white border border-gray-300 rounded-xl text-xl font-bold text-gray-700 focus:border-schindler-red outline-none" required placeholder="เช่น TFS-001">
+                        <p class="text-sm text-gray-400 mt-1" id="upIdHint">แนะนำ: ID ถัดไปคือ...</p>
+                    </div>
+                    <div>
+                        <label class="text-base font-bold text-gray-600 mb-1 block">ชื่ออุปกรณ์</label>
+                        <input type="text" id="upName" class="w-full p-4 border border-gray-300 rounded-xl text-lg focus:border-schindler-red outline-none" required>
+                    </div>
+                    <div>
+                        <label class="text-base font-bold text-gray-600 mb-2 block">รูปภาพ</label>
+                        <div id="upPreviewBox" class="hidden mb-3 relative h-48 bg-gray-100 rounded-xl overflow-hidden border border-gray-300">
+                            <img id="upPreview" class="w-full h-full object-contain">
+                            <button type="button" onclick="clearImg('up')" class="absolute top-2 right-2 bg-red-600 text-white rounded-full p-2 shadow-lg"><span class="material-icons text-base">close</span></button>
+                        </div>
+                        <label class="flex flex-col items-center justify-center h-28 border-2 border-dashed border-gray-400 rounded-xl bg-gray-50 hover:bg-gray-100 cursor-pointer transition">
+                            <span class="material-icons text-gray-400 text-4xl">add_photo_alternate</span>
+                            <span class="text-sm text-gray-500 mt-2 font-bold">ถ่ายรูป / เลือกรูป</span>
+                            <input type="file" id="upFile" accept="image/*" class="hidden" onchange="handleImg(this, 'up')">
+                        </label>
+                    </div>
+                </div>
+                <div class="flex gap-4">
+                    <button type="button" onclick="closeM('upModal')" class="flex-1 py-4 bg-gray-100 rounded-xl font-bold text-gray-600 text-lg hover:bg-gray-200">ยกเลิก</button>
+                    <button type="submit" class="flex-1 py-4 bg-schindler-red text-white rounded-xl font-bold text-lg shadow-lg">บันทึก</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="loginModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
+        <div class="bg-white w-full max-w-sm rounded-3xl p-8 shadow-2xl text-center card-border">
+            <div class="w-20 h-20 bg-black rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg border-4 border-white">
+                <span class="material-icons text-white text-4xl">admin_panel_settings</span>
+            </div>
+            <h3 class="text-2xl font-bold mb-6 text-gray-800">Admin Access</h3>
+            <form onsubmit="event.preventDefault(); doLogin();">
+                <div class="relative mb-6">
+                    <input type="password" id="pass" class="w-full p-4 border-2 border-gray-200 rounded-xl text-center text-xl tracking-widest outline-none focus:border-schindler-red transition pr-12" placeholder="รหัสผ่าน" required>
+                    <button type="button" onclick="togglePass()" class="absolute right-3 top-4 text-gray-400 hover:text-gray-600 p-1"><span class="material-icons text-2xl" id="eyeIcon">visibility</span></button>
+                </div>
+                <button type="submit" class="w-full py-4 bg-schindler-red text-white rounded-xl font-bold text-lg shadow-xl hover:bg-red-700 transition active:scale-95">เข้าสู่ระบบ</button>
+                <div class="mt-6 flex justify-between items-center px-2">
+                    <button type="button" onclick="closeM('loginModal')" class="text-gray-400 text-base hover:text-gray-600">ยกเลิก</button>
+                    <button type="button" onclick="openHelp('admin')" class="text-blue-600 text-base font-bold hover:text-blue-800 flex items-center gap-1">
+                        <span class="material-icons text-sm">help</span> คู่มือ Admin
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="approveModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl">
+            <h3 class="text-xl font-bold text-center mb-2">ยืนยันการอนุมัติ?</h3>
+            <p id="apprItemName" class="text-center text-base text-gray-500 mb-6">...</p>
+            <form onsubmit="event.preventDefault(); submitApprove();">
+                <input type="hidden" id="apprId"><input type="hidden" id="apprType">
+                <div class="mb-6">
+                    <label class="text-base font-bold text-gray-600 block mb-2">แนบรูปหลักฐาน (ถ้ามี)</label>
+                    <div id="apprPreviewBox" class="hidden mb-3 relative h-40 bg-gray-100 rounded-xl overflow-hidden border border-gray-300">
+                        <img id="apprPreview" class="w-full h-full object-contain">
+                        <button type="button" onclick="clearImg('appr')" class="absolute top-2 right-2 bg-red-600 text-white rounded-full p-2"><span class="material-icons text-xs">close</span></button>
+                    </div>
+                    <label class="flex flex-col items-center justify-center h-20 border-2 border-dashed border-gray-400 rounded-xl bg-gray-50 hover:bg-gray-100 cursor-pointer">
+                        <span class="material-icons text-gray-400 text-3xl">camera_alt</span>
+                        <span class="text-xs text-gray-500 mt-1 font-bold">ถ่ายรูป / เลือกรูป</span>
+                        <input type="file" id="apprFile" accept="image/*" class="hidden" onchange="handleImg(this, 'appr')">
+                    </label>
+                </div>
+                <div class="flex gap-3">
+                    <button type="button" onclick="closeM('approveModal')" class="flex-1 py-3 bg-white border border-gray-300 rounded-xl text-gray-600 text-lg font-bold">ยกเลิก</button>
+                    <button type="submit" class="flex-1 py-3 bg-green-600 text-white rounded-xl font-bold text-lg shadow">ยืนยัน</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="histEditModal" class="hidden fixed inset-0 z-[65] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-pop">
+            <h3 class="text-xl font-bold text-gray-800 mb-4 text-center">แก้ไขประวัติ</h3>
+            <input type="hidden" id="histEditRow">
+            <div class="space-y-4">
+                <div>
+                    <label class="text-sm font-bold text-gray-600 block mb-1">ชื่อผู้ทำรายการ</label>
+                    <input type="text" id="histEditUser" class="w-full p-3 border rounded-xl outline-none focus:border-schindler-red">
+                </div>
+                <div>
+                    <label class="text-sm font-bold text-gray-600 block mb-1">รูปหลักฐาน (อัปโหลดใหม่)</label>
+                    <div id="histEditPreviewBox" class="hidden mb-2 relative h-32 bg-gray-100 rounded-xl overflow-hidden border border-gray-300">
+                        <img id="histEditPreview" class="w-full h-full object-contain">
+                        <button type="button" onclick="clearImg('histEdit')" class="absolute top-2 right-2 bg-red-600 text-white rounded-full p-1"><span class="material-icons text-xs">close</span></button>
+                    </div>
+                    <label class="flex flex-col items-center justify-center h-20 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 hover:bg-gray-100 cursor-pointer">
+                        <span class="material-icons text-gray-400">add_photo_alternate</span>
+                        <input type="file" id="histEditFile" accept="image/*" class="hidden" onchange="handleImg(this, 'histEdit')">
+                    </label>
+                </div>
+            </div>
+            <div class="flex gap-3 mt-6">
+                <button onclick="closeAlert('histEditModal')" class="flex-1 py-3 bg-gray-100 rounded-xl text-gray-600 font-bold">ยกเลิก</button>
+                <button onclick="submitHistoryEdit()" class="flex-1 py-3 bg-schindler-red text-white rounded-xl font-bold shadow">บันทึก</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="busy" class="hidden fixed inset-0 z-[100] bg-white/95 flex flex-col items-center justify-center backdrop-blur-sm">
+        <div class="spinner mb-6"></div>
+        <p class="text-xl font-bold text-gray-700 animate-pulse">กำลังบันทึกข้อมูลและอัปโหลดรูป...</p>
+        <p class="text-sm text-gray-500 mt-2">กรุณารอสักครู่ ห้ามปิดหน้านี้</p>
+    </div>
+
+    <script>
+        // ==========================================
+        // 🚨 ใส่ URL Web App ที่ Deploy ล่าสุด !! 🚨
+        // ==========================================
+        const API_URL = 'https://script.google.com/macros/s/AKfycbyOPJ2-lK66ukbMB27iSg3qbblwnsZgNjZI8ObQUHie1zftVIWhWmnAD0cQ4upObEI/exec'; 
+        // ==========================================
+        
+        let items = [], historyData = [], filter = 'all', isAdmin = false, selItem = null;
+
+        document.addEventListener('DOMContentLoaded', load);
+
+        async function load() {
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('grid').innerHTML = '';
+            try {
+                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({action:'read'}) });
+                const json = await res.json();
+                items = json.data || [];
+                render();
+                if(isAdmin) loadHistory(); 
+            } catch(e) { 
+                showPopup('ข้อผิดพลาด', 'เชื่อมต่อระบบไม่ได้: ' + e.message, 'error'); 
+            } finally { 
+                document.getElementById('loading').classList.add('hidden'); 
+            }
+        }
+
+        async function loadHistory() {
+            try {
+                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({action:'read_history'}) });
+                const json = await res.json();
+                historyData = json.data || [];
+                renderHistory();
+            } catch(e) { console.error(e); }
+        }
+
+        async function send(payload) {
+            document.getElementById('busy').classList.remove('hidden');
+            try {
+                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+                const json = await res.json();
+                if(json.status === 'success') {
+                    await load();
+                    return true;
+                } else throw new Error(json.message || 'เกิดข้อผิดพลาดไม่ทราบสาเหตุ');
+            } catch(e) { 
+                showPopup('ทำรายการไม่สำเร็จ', e.message, 'error'); 
+                return false; 
+            } finally { 
+                document.getElementById('busy').classList.add('hidden'); 
+            }
+        }
+
+        function render() {
+            const grid = document.getElementById('grid');
+            grid.innerHTML = '';
+            
+            document.getElementById('cTotal').innerText = items.length;
+            document.getElementById('cAvail').innerText = items.filter(x=>x.status==='available').length;
+            document.getElementById('cBorrow').innerText = items.filter(x=>x.status!=='available').length;
+
+            if(isAdmin) renderAdminReqs();
+
+            const term = document.getElementById('searchBox').value.toLowerCase();
+            const list = items.filter(x => {
+                const matchText = x.name.toLowerCase().includes(term) || x.id.toLowerCase().includes(term);
+                if(filter === 'available') return matchText && x.status === 'available';
+                if(filter === 'borrowed') return matchText && x.status !== 'available';
+                return matchText;
+            });
+
+            if(list.length === 0) {
+                grid.innerHTML = `<div class="text-center py-12 text-gray-400 text-lg bg-white rounded-3xl border-2 border-dashed border-gray-200"><span class="material-icons mb-2 text-4xl">search_off</span><br>ไม่พบข้อมูล</div>`; 
+                return;
+            }
+
+            list.forEach(x => {
+                const isAvail = x.status === 'available';
+                const isPending = x.status.includes('pending');
+                let statusBadge = '';
+                if (isAvail) statusBadge = `<span class="px-3 py-1 rounded-lg bg-green-100 text-green-700 text-sm font-bold border border-green-200">ว่าง</span>`;
+                else if (isPending) statusBadge = `<span class="px-3 py-1 rounded-lg bg-blue-100 text-blue-700 text-sm font-bold border border-blue-200">รออนุมัติ</span>`;
+                else statusBadge = `<span class="px-3 py-1 rounded-lg bg-yellow-100 text-yellow-700 text-sm font-bold border border-yellow-200">ถูกยืม</span>`;
+
+                let adminControls = '';
+                if(isAdmin) {
+                    adminControls = `
+                    <div class="absolute top-3 right-3 flex gap-2 z-10">
+                        <button onclick="edit('${x.id}'); event.stopPropagation()" class="w-10 h-10 bg-white rounded-full text-blue-600 shadow-md flex items-center justify-center hover:bg-blue-50 border border-gray-100"><span class="material-icons text-xl">edit</span></button>
+                        <button onclick="del('${x.id}'); event.stopPropagation()" class="w-10 h-10 bg-white rounded-full text-red-600 shadow-md flex items-center justify-center hover:bg-red-50 border border-gray-100"><span class="material-icons text-xl">delete</span></button>
+                    </div>`;
+                }
+
+                const imgDisplay = x.photoUrl 
+                    ? `<img src="${x.photoUrl}" class="w-full h-full object-cover" onclick="showImg('${x.photoUrl}'); event.stopPropagation()">` 
+                    : `<div class="w-full h-full bg-gray-200 flex items-center justify-center"><span class="material-icons text-gray-400 text-4xl">image</span></div>`;
+
+                let borrowInfo = '';
+                if (!isAvail && x.borrower) {
+                    borrowInfo = `<div class="flex items-start text-sm text-gray-500 bg-gray-50 p-2 rounded-lg mt-2 border border-gray-100">
+                        <span class="material-icons text-base mr-1 mt-0.5">person</span> <span class="line-clamp-1">${x.borrower}</span>
+                    </div>`;
+                }
+
+                grid.innerHTML += `
+                    <div class="group bg-white rounded-2xl card-border overflow-hidden flex h-36 relative active:scale-98 transition-all duration-200 cursor-pointer hover:shadow-lg" onclick="clk('${x.id}')">
+                        ${adminControls}
+                        <div class="w-36 bg-gray-100 flex-shrink-0 overflow-hidden relative border-r border-gray-100">
+                            ${imgDisplay}
+                            ${!isAvail ? '<div class="absolute inset-0 bg-black/10 pointer-events-none"></div>' : ''}
+                        </div>
+                        <div class="flex-1 p-4 flex flex-col justify-between">
+                            <div>
+                                <div class="flex justify-between items-start mb-2">
+                                    <span class="text-xs text-gray-400 font-mono tracking-wider bg-gray-100 px-2 py-0.5 rounded border border-gray-200">${x.id}</span>
+                                    ${statusBadge}
+                                </div>
+                                <h4 class="font-bold text-lg text-gray-800 line-clamp-2 leading-tight">${x.name}</h4>
+                            </div>
+                            ${borrowInfo}
+                        </div>
+                    </div>`;
+            });
+        }
+
+        function renderAdminReqs() {
+            const list = document.getElementById('reqList');
+            list.innerHTML = '';
+            const pending = items.filter(x=>x.status.includes('pending'));
+            if(pending.length === 0) { document.getElementById('noReq').classList.remove('hidden'); return; }
+            document.getElementById('noReq').classList.add('hidden');
+
+            pending.forEach(x => {
+                const isBorrow = x.status === 'pending_borrow';
+                const typeText = isBorrow ? 'ขอเบิก' : 'แจ้งคืน';
+                const typeClass = isBorrow ? 'text-blue-600 bg-blue-50 border-blue-100' : 'text-purple-600 bg-purple-50 border-purple-100';
+                
+                list.innerHTML += `
+                    <div class="p-5 bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md transition">
+                        <div class="flex justify-between mb-3">
+                            <span class="text-sm font-bold px-3 py-1 rounded-lg border ${typeClass}">${typeText}</span>
+                            <span class="text-sm text-gray-500 font-mono">${x.id}</span>
+                        </div>
+                        <div class="font-bold text-lg text-gray-800 mb-2">${x.name}</div>
+                        <div class="text-base text-gray-600 mb-4 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                            <span class="material-icons text-base mr-1 align-text-bottom">account_circle</span> ${x.borrower}
+                        </div>
+                        <div class="flex gap-3">
+                            <button onclick="openApprove('${x.id}','${isBorrow?'borrow':'return'}', '${x.name}')" class="flex-1 bg-green-600 hover:bg-green-700 text-white text-base py-3 rounded-xl font-bold shadow transition">อนุมัติ</button>
+                            <button onclick="reject('${x.id}','${isBorrow?'borrow':'return'}')" class="flex-1 bg-white border border-gray-300 text-gray-600 text-base py-3 rounded-xl font-bold hover:bg-gray-50 transition">ปฏิเสธ</button>
+                        </div>
+                    </div>`;
+            });
+        }
+
+        function renderHistory() {
+            const list = document.getElementById('histList');
+            list.innerHTML = '';
+            if(historyData.length === 0) { document.getElementById('noHist').classList.remove('hidden'); return; }
+            document.getElementById('noHist').classList.add('hidden');
+
+            historyData.forEach(h => {
+                const imgThumb = h.proofUrl 
+                    ? `<img src="${h.proofUrl}" class="w-16 h-16 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-80" onclick="showImg('${h.proofUrl}')">` 
+                    : `<div class="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 border border-gray-200"><span class="material-icons text-xl">image_not_supported</span></div>`;
+                
+                let actionColor = h.action.includes('ยืม') ? 'text-green-600' : 'text-purple-600';
+                
+                list.innerHTML += `
+                    <div class="p-4 bg-white rounded-2xl border border-gray-200 shadow-sm flex items-start gap-4">
+                        <div class="flex-shrink-0">
+                            ${imgThumb}
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="font-bold text-base ${actionColor}">${h.action}</span>
+                                <span class="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">${h.date.split(' ')[0]}</span>
+                            </div>
+                            <div class="font-bold text-gray-800 text-base line-clamp-1">${h.name}</div>
+                            <div class="text-gray-500 text-sm mt-1 line-clamp-1">โดย: ${h.user}</div>
+                            
+                            <div class="flex gap-2 mt-2 justify-end">
+                                <button onclick="editHistory(${h.row}, '${h.user}', '${h.proofUrl}')" class="text-blue-500 hover:text-blue-700 bg-blue-50 p-1.5 rounded-lg"><span class="material-icons text-sm">edit</span></button>
+                                <button onclick="deleteHistory(${h.row})" class="text-red-500 hover:text-red-700 bg-red-50 p-1.5 rounded-lg"><span class="material-icons text-sm">delete</span></button>
+                            </div>
+                        </div>
+                    </div>`;
+            });
+        }
+
+        // --- History Logic ---
+        function editHistory(row, user, proof) {
+            document.getElementById('histEditRow').value = row;
+            document.getElementById('histEditUser').value = user;
+            clearImg('histEdit'); // Clear old image input
+            document.getElementById('histEditModal').classList.remove('hidden');
+        }
+
+        async function submitHistoryEdit() {
+            const row = document.getElementById('histEditRow').value;
+            const user = document.getElementById('histEditUser').value;
+            const img = await getCompressedImg('histEditFile');
+            
+            closeAlert('histEditModal');
+            const success = await send({
+                action: 'edit_history',
+                row: row,
+                user: user,
+                imageData: img?.data,
+                imageName: img?.name
+            });
+            if(success) showPopup('สำเร็จ', 'แก้ไขประวัติเรียบร้อย', 'success');
+        }
+
+        async function deleteHistory(row) {
+            if(!confirm('ยืนยันที่จะลบประวัติรายการนี้? การกระทำนี้ไม่สามารถย้อนกลับได้')) return;
+            const success = await send({ action: 'delete_history', row: row });
+            if(success) showPopup('สำเร็จ', 'ลบประวัติเรียบร้อย', 'success');
+        }
+
+        // --- User Actions ---
+        function clk(id) {
+            if(isAdmin) return;
+            selItem = items.find(x => x.id === id);
+            if(selItem.status.includes('pending')) { showPopup('แจ้งเตือน', 'รายการนี้รอการอนุมัติอยู่', 'warning'); return; }
+
+            const isAvail = selItem.status === 'available';
+            document.getElementById('actTitle').innerText = isAvail ? 'ยืมอุปกรณ์' : 'คืนอุปกรณ์';
+            document.getElementById('actTitle').className = isAvail ? 'text-2xl font-bold text-green-700' : 'text-2xl font-bold text-purple-700';
+            document.getElementById('actSub').innerText = `${selItem.id}: ${selItem.name}`;
+            
+            document.getElementById('actEmpId').value = ''; 
+            document.getElementById('actName').value = ''; 
+            document.getElementById('actPhone').value = ''; 
+            document.getElementById('actNote').value = ''; 
+
+            if(!isAvail && selItem.borrower) {
+                const regex = /^(\d+)\s-\s([^(]+)\s?\(?([^)]*)\)?\s?\[?Note:\s?(.*)\]?$/;
+                const match = selItem.borrower.match(regex);
+                if (match) {
+                    document.getElementById('actEmpId').value = match[1] || '';
+                    document.getElementById('actName').value = match[2].trim() || '';
+                    document.getElementById('actPhone').value = match[3] || '';
+                } else {
+                    document.getElementById('actName').value = selItem.borrower;
+                }
+            }
+            document.getElementById('actModal').classList.remove('hidden');
+        }
+
+        async function submitAct() {
+            const empId = document.getElementById('actEmpId').value.trim();
+            const name = document.getElementById('actName').value.trim();
+            const phone = document.getElementById('actPhone').value.trim();
+            const note = document.getElementById('actNote').value.trim();
+            
+            if(!/^\d{6,12}$/.test(empId)) { showPopup('ข้อมูลไม่ถูกต้อง', 'รหัสพนักงานต้องเป็นตัวเลข 6-12 หลัก', 'error'); return; }
+            if(!name) { showPopup('ข้อมูลไม่ถูกต้อง', 'กรุณาระบุชื่อ-นามสกุล', 'error'); return; }
+            if(!phone) { showPopup('ข้อมูลไม่ถูกต้อง', 'กรุณาระบุเบอร์โทรศัพท์', 'error'); return; }
+
+            let userString = `${empId} - ${name} (${phone})`;
+            if(note) userString += ` [Note: ${note}]`;
+
+            const action = selItem.status === 'available' ? 'borrow_request' : 'return_request';
+            const success = await send({ action: action, id: selItem.id, user: userString });
+            if(success) {
+                closeM('actModal');
+                showPopup('สำเร็จ', 'ส่งคำขอเรียบร้อยแล้ว รอการอนุมัติ', 'success');
+            }
+        }
+
+        // --- Other Utils ---
+        function showPopup(title, msg, type='info') {
+            const modal = document.getElementById('customAlert');
+            const iconBox = document.getElementById('alertIconBox');
+            const icon = document.getElementById('alertIcon');
+            const btns = document.getElementById('alertBtns');
+
+            document.getElementById('alertTitle').innerText = title;
+            document.getElementById('alertMsg').innerText = msg;
+            
+            let color = 'gray';
+            if(type === 'success') { color = 'green'; icon.innerText = 'check_circle'; }
+            else if (type === 'error') { color = 'red'; icon.innerText = 'error'; }
+            else if (type === 'confirm') { color = 'yellow'; icon.innerText = 'help'; }
+            else { icon.innerText = 'info'; }
+
+            iconBox.className = `w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 bg-${color}-100 text-${color}-600 border-4 border-${color}-50`;
+            btns.innerHTML = `<button onclick="closeAlert('customAlert')" class="flex-1 py-3 bg-gray-800 text-white rounded-xl font-bold text-lg shadow-lg active:scale-95 transition">ตกลง</button>`;
+            modal.classList.remove('hidden');
+        }
+
+        function closeAlert(id) { document.getElementById(id).classList.add('hidden'); }
+
+        function toggleAdmin() {
+            if(isAdmin) {
+                isAdmin = false;
+                document.getElementById('adminPanel').classList.add('hidden');
+                document.getElementById('addBtn').classList.add('hidden');
+                document.getElementById('bottomStats').classList.remove('hidden');
+                document.getElementById('adminIcon').parentElement.classList.remove('bg-red-600');
+                document.getElementById('adminIcon').parentElement.classList.add('bg-black/20');
+                render();
+            } else {
+                document.getElementById('pass').value = '';
+                document.getElementById('loginModal').classList.remove('hidden');
+            }
+        }
+
+        function doLogin() {
+            if(document.getElementById('pass').value === 'jiraphong2227') { 
+                isAdmin = true;
+                closeM('loginModal');
+                document.getElementById('adminPanel').classList.remove('hidden');
+                document.getElementById('addBtn').classList.remove('hidden');
+                document.getElementById('bottomStats').classList.add('hidden');
+                document.getElementById('adminIcon').parentElement.classList.remove('bg-black/20');
+                document.getElementById('adminIcon').parentElement.classList.add('bg-schindler-red');
+                render();
+                loadHistory(); 
+            } else showPopup('ผิดพลาด', 'รหัสผ่านไม่ถูกต้อง', 'error');
+        }
+
+        function openUpsert() {
+            document.getElementById('upMode').value = 'create';
+            document.getElementById('upTitle').innerText = 'เพิ่มอุปกรณ์ใหม่';
+            const nums = items.map(x => parseInt(x.id.replace(/\D/g,'')) || 0);
+            const next = nums.length ? Math.max(...nums)+1 : 1;
+            const nextId = `TFS-${String(next).padStart(3,'0')}`;
+            
+            const idInput = document.getElementById('upId');
+            idInput.value = ''; 
+            idInput.placeholder = nextId; 
+            idInput.readOnly = false; 
+
+            document.getElementById('upIdHint').innerText = `แนะนำ: ID ถัดไปคือ ${nextId}`;
+            document.getElementById('upName').value = '';
+            clearImg('up');
+            document.getElementById('upModal').classList.remove('hidden');
+        }
+
+        function edit(id) {
+            const item = items.find(x=>x.id===id);
+            document.getElementById('upMode').value = 'update';
+            document.getElementById('upTitle').innerText = 'แก้ไขข้อมูล';
+            document.getElementById('upId').value = item.id;
+            document.getElementById('upId').readOnly = true; 
+            document.getElementById('upIdHint').innerText = '';
+            document.getElementById('upName').value = item.name;
+            clearImg('up'); 
+            document.getElementById('upModal').classList.remove('hidden');
+        }
+
+        async function submitUp() {
+            const mode = document.getElementById('upMode').value;
+            const id = document.getElementById('upId').value.trim() || document.getElementById('upId').placeholder;
+            
+            if (mode === 'create' && items.some(x => x.id === id)) {
+                showPopup('ข้อมูลซ้ำ', `รหัสอุปกรณ์ ${id} มีอยู่ในระบบแล้ว`, 'error');
+                return;
+            }
+
+            const img = await getCompressedImg('upFile');
+            const success = await send({
+                action: mode,
+                id: id,
+                name: document.getElementById('upName').value,
+                imageData: img?.data,
+                imageName: img?.name
+            });
+            if(success) closeM('upModal');
+        }
+
+        async function del(id) { 
+            if(confirm('ยืนยันที่จะลบอุปกรณ์นี้ออกจากระบบ?')) await send({ action: 'delete', id: id }); 
+        }
+
+        function openApprove(id, type, name) {
+            document.getElementById('apprId').value = id;
+            document.getElementById('apprType').value = type;
+            document.getElementById('apprItemName').innerText = name;
+            clearImg('appr');
+            document.getElementById('approveModal').classList.remove('hidden');
+        }
+
+        async function submitApprove() {
+            const img = await getCompressedImg('apprFile');
+            const success = await send({
+                action: document.getElementById('apprType').value === 'borrow' ? 'approve_borrow' : 'approve_return',
+                id: document.getElementById('apprId').value,
+                imageData: img?.data,
+                imageName: img?.name
+            });
+            if(success) { closeM('approveModal'); showPopup('สำเร็จ', 'อนุมัติรายการเรียบร้อย', 'success'); }
+        }
+
+        async function reject(id, type) {
+            if(confirm('ยืนยันปฏิเสธคำขอนี้?')) await send({ action: type === 'borrow' ? 'reject_borrow' : 'reject_return', id: id });
+        }
+
+        function getCompressedImg(inputId) {
+            const input = document.getElementById(inputId);
+            if (!input.files || !input.files[0]) return Promise.resolve(null);
+            return new Promise((resolve) => {
+                const file = input.files[0];
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.src = e.target.result;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const MAX_WIDTH = 800;
+                        const scale = MAX_WIDTH / img.width;
+                        canvas.width = MAX_WIDTH;
+                        canvas.height = img.height * scale;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+                        resolve({ name: file.name, data: dataUrl });
+                    };
+                };
+            });
+        }
+
+        function handleImg(input, prefix) {
+            if(input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    document.getElementById(prefix+'Preview').src = e.target.result;
+                    document.getElementById(prefix+'PreviewBox').classList.remove('hidden');
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        function clearImg(prefix) {
+            document.getElementById(prefix+'File').value = '';
+            document.getElementById(prefix+'PreviewBox').classList.add('hidden');
+        }
+
+        function openHelp(mode) {
+            const content = document.getElementById('helpContent');
+            if (mode === 'user') {
+                content.innerHTML = `
+                    <div class="space-y-6">
+                        <div class="border-l-4 border-green-500 pl-4 bg-green-50/50 p-4 rounded-r-xl">
+                            <h4 class="font-bold text-gray-800 text-xl mb-3 flex items-center gap-2"><span class="material-icons text-green-600">login</span> สำหรับพนักงาน (ยืมอุปกรณ์)</h4>
+                            <ol class="list-decimal pl-5 text-gray-700 space-y-2 leading-relaxed">
+                                <li>ค้นหาอุปกรณ์ที่ต้องการในช่องค้นหา</li>
+                                <li>สังเกตสถานะต้องเป็น <span class="text-green-700 font-bold bg-green-100 px-2 rounded">ว่าง</span> เท่านั้น</li>
+                                <li>กดที่การ์ดอุปกรณ์นั้น จะมีหน้าต่างเด้งขึ้นมา</li>
+                                <li>กรอกข้อมูลให้ครบ (รหัสพนักงาน, ชื่อ, เบอร์โทร, หมายเหตุ)</li>
+                                <li>กดปุ่ม <b>"ยืนยัน"</b> และรอ Admin อนุมัติ</li>
+                            </ol>
+                        </div>
+                        <div class="border-l-4 border-yellow-500 pl-4 bg-yellow-50/50 p-4 rounded-r-xl">
+                            <h4 class="font-bold text-gray-800 text-xl mb-3 flex items-center gap-2"><span class="material-icons text-yellow-600">logout</span> สำหรับพนักงาน (คืนอุปกรณ์)</h4>
+                            <ol class="list-decimal pl-5 text-gray-700 space-y-2 leading-relaxed">
+                                <li>เลือกตัวกรอง <span class="text-yellow-700 font-bold bg-yellow-100 px-2 rounded">ถูกยืม</span></li>
+                                <li>กดที่การ์ดอุปกรณ์ที่คุณยืมไป</li>
+                                <li>ตรวจสอบชื่อและข้อมูล</li>
+                                <li>กดปุ่ม <b>"ยืนยัน"</b> เพื่อแจ้งคืน</li>
+                                <li>นำของไปคืนที่จุดคืนของเพื่อให้ Admin ตรวจสอบ</li>
+                            </ol>
+                        </div>
+                    </div>`;
+            } else {
+                closeM('loginModal'); 
+                content.innerHTML = `
+                    <div class="space-y-6">
+                        <div class="border-l-4 border-blue-500 pl-4 bg-blue-50/50 p-4 rounded-r-xl">
+                            <h4 class="font-bold text-gray-800 text-lg mb-2">1. การอนุมัติ (Approve)</h4>
+                            <ul class="list-disc pl-4 text-gray-600 space-y-1">
+                                <li>รายการคำขอใหม่จะอยู่ที่แท็บ "คำขออนุมัติ"</li>
+                                <li>กด <b>อนุมัติ</b> เพื่อยืนยัน หรือ <b>ปฏิเสธ</b> เพื่อยกเลิก</li>
+                                <li>สามารถถ่ายรูปหลักฐานแนบไปตอนอนุมัติได้ (เช่น สภาพของตอนคืน)</li>
+                            </ul>
+                        </div>
+                        <div class="border-l-4 border-gray-800 pl-4 bg-gray-50 p-4 rounded-r-xl">
+                            <h4 class="font-bold text-gray-800 text-lg mb-2">2. จัดการคลังอุปกรณ์</h4>
+                            <ul class="list-disc pl-4 text-gray-600 space-y-1">
+                                <li><b>เพิ่มของใหม่:</b> กดปุ่ม + สีแดงมุมขวาล่าง</li>
+                                <li><b>แก้ไข:</b> กดปุ่มดินสอที่การ์ดอุปกรณ์</li>
+                                <li><b>ลบ:</b> กดปุ่มถังขยะ (ระวัง! ลบแล้วกู้คืนไม่ได้)</li>
+                            </ul>
+                        </div>
+                        <div class="border-l-4 border-purple-500 pl-4 bg-purple-50 p-4 rounded-r-xl">
+                            <h4 class="font-bold text-gray-800 text-lg mb-2">3. แก้ไขประวัติ</h4>
+                            <ul class="list-disc pl-4 text-gray-600 space-y-1">
+                                <li>ไปที่แท็บ "ประวัติยืม-คืน"</li>
+                                <li>กดปุ่มดินสอ เพื่อแก้ไขข้อมูลผู้ยืม/รูปภาพ</li>
+                                <li>กดปุ่มถังขยะ เพื่อลบประวัติที่ผิดพลาด</li>
+                            </ul>
+                        </div>
+                    </div>`;
+            }
+            document.getElementById('helpModal').classList.remove('hidden');
+        }
+
+        function showImg(url) {
+            document.getElementById('fullImage').src = url;
+            document.getElementById('imgModal').classList.remove('hidden');
+        }
+        function closeImg() {
+            document.getElementById('imgModal').classList.add('hidden');
+            document.getElementById('fullImage').src = '';
+        }
+
+        function closeM(id) { document.getElementById(id).classList.add('hidden'); }
+        function setFilter(f) {
+            filter = f;
+            ['btnAll','btnAvail','btnBorrow'].forEach(b => document.getElementById(b).className = 'flex-1 py-2.5 rounded-xl text-base font-bold bg-white text-gray-600 transition border border-gray-300');
+            const active = f==='all'?'btnAll':(f==='available'?'btnAvail':'btnBorrow');
+            document.getElementById(active).className = 'flex-1 py-2.5 rounded-xl text-base font-bold bg-gray-800 text-white transition shadow border border-gray-800 transform scale-105';
+            render();
+        }
+        function togglePass() {
+            const i = document.getElementById('pass');
+            const ico = document.getElementById('eyeIcon');
+            if(i.type==='password') { i.type='text'; ico.innerText='visibility_off'; }
+            else { i.type='password'; ico.innerText='visibility'; }
+        }
+        function switchTab(tab) {
+            if(tab === 'requests') {
+                document.getElementById('tab-requests').classList.add('active');
+                document.getElementById('tab-history').classList.remove('active');
+                document.getElementById('view-requests').classList.remove('hidden');
+                document.getElementById('view-history').classList.add('hidden');
+            } else {
+                document.getElementById('tab-requests').classList.remove('active');
+                document.getElementById('tab-history').classList.add('active');
+                document.getElementById('view-requests').classList.add('hidden');
+                document.getElementById('view-history').classList.remove('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
